@@ -300,6 +300,19 @@ qbool OPSDecrypt::DecOpsData(OPSDeviceInfo &oinfo, qsizetype out_len, qbool enc)
 
 qbool OPSDecrypt::DecOpsFile(OPSDeviceInfo &oinfo, OPSEntry entry)
 {
+    std::function<qstr(quint64)> get_tr_speed = [&]
+            (quint64 bytes)
+    {        // According to the Si standard KB is 1000 bytes, KiB is 1024
+        // but on windows sizes are calculated by dividing by 1024 so we do what they do.
+        const quint64 kb = 1024;
+        const quint64 mb = 1024 * kb;
+        if (bytes >= mb)
+            return QLocale().toString(bytes / (double)mb, 'f', 2) + "MB/S";
+        if (bytes >= kb)
+            return QLocale().toString(bytes / (double)kb, 'f', 2) + "KB/S";
+        return QLocale().toString(bytes) + "B/S";
+    };
+
     qfile out_dev(qstr("%0/%1").arg(oinfo.m_out_path, entry.m_fname));
     if (!out_dev.open(qiodev::WriteOnly | qiodev::Truncate))
         return(0);
@@ -344,9 +357,12 @@ qbool OPSDecrypt::DecOpsFile(OPSDeviceInfo &oinfo, OPSEntry entry)
             return(0);
         }
 
-        qsizetype percent(((qreal)stimer.elapsed()/ entry.m_tmplen)*100);
+        qlong percent(((qreal)offset/entry.m_tmplen)*100);
+          qlong trspeed(stimer.elapsed()? (offset*1000/stimer.elapsed()): 0xa);
 
-        qInfo().noquote() << QString("Extracting[%0](%1)...").arg(entry.m_pname, qstr::number((qreal)percent));
+        qInfo().noquote() << QString("Extracting[%0](%1/%2)...").arg(entry.m_pname,
+                                                                     qstr::number((qreal)percent),
+                                                                     get_tr_speed(trspeed));
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
